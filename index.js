@@ -31,7 +31,7 @@ const searchStmt = db.prepare(`
     SELECT id, image, title, link, created_at
     FROM games
     WHERE title LIKE ?
-    ORDER BY created_at DESC
+    ORDER BY id ASC
     LIMIT ? OFFSET ?
 `);
 
