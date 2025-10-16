@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Catálogo de Juegos</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+        }
+
+        .search-container {
+            margin-bottom: 30px;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        #searchInput {
+            padding: 12px 20px;
+            font-size: 16px;
+            border: 2px solid #667eea;
+            border-radius: 25px;
+            width: 100%;
+            max-width: 500px;
+            outline: none;
+            transition: all 0.3s;
+        }
+
+        #searchInput:focus {
+            border-color: #764ba2;
+            box-shadow: 0 0 10px rgba(102, 126, 234, 0.3);
+        }
+
+        .games-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 25px;
+            margin-bottom: 30px;
+        }
+
+        .game-card {
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s, box-shadow 0.3s;
+            cursor: pointer;
+        }
+
+        .game-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+        }
+
+        .game-card img {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+        }
+
+        .game-card-content {
+            padding: 15px;
+        }
+
+        .game-card h3 {
+            font-size: 16px;
+            color: #333;
+            margin-bottom: 10px;
+            min-height: 48px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin-top: 30px;
+            flex-wrap: wrap;
+        }
+
+        .pagination button {
+            padding: 10px 15px;
+            border: none;
+            background: #667eea;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .pagination button:hover:not(:disabled) {
+            background: #764ba2;
+            transform: scale(1.05);
+        }
+
+        .pagination button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .pagination button.active {
+            background: #764ba2;
+            font-weight: bold;
+        }
+
+        .pagination-info {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            font-size: 18px;
+            color: #667eea;
+        }
+
+        .error {
+            text-align: center;
+            padding: 40px;
+            font-size: 18px;
+            color: #e74c3c;
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 40px;
+            font-size: 18px;
+            color: #666;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+
+        .paginationContainer {
+            margin-bottom: 1em;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎮 Catálogo de Juegos</h1>
+        
+        <div class="search-container">
+            <input 
+                type="text" 
+                id="searchInput" 
+                placeholder="Buscar juegos..."
+            >
+        </div>
+
+        <div class="paginationContainer"></div>
+
+        <div id="gamesContainer">
+            <div class="loading">
+                <div class="spinner"></div>
+                Cargando juegos...
+            </div>
+        </div>
+
+        <div class="paginationContainer"></div>
+    </div>
+
+    <script>
+        // Configuración
+        const CONFIG = {
+            API_URL: 'http://localhost:3000',
+            ITEMS_PER_PAGE: 50, // Variable configurable
+            DEBOUNCE_DELAY: 500
+        };
+
+        // Estado de la aplicación
+        let currentPage = 1;
+        let currentSearch = '';
+        let totalPages = 1;
+
+        // Elementos del DOM
+        const gamesContainer = document.getElementById('gamesContainer');
+        const paginationContainers = document.querySelectorAll('.paginationContainer'); // <— usar clase
+        const searchInput = document.getElementById('searchInput');
+
+        // Debounce para la búsqueda
+        let searchTimeout;
+        searchInput.addEventListener('input', (e) => {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                currentSearch = e.target.value.trim();
+                currentPage = 1;
+                loadGames();
+            }, CONFIG.DEBOUNCE_DELAY);
+        });
+
+        // Función para cargar los juegos
+        async function loadGames() {
+            try {
+                showLoading();
+                
+                const params = new URLSearchParams({
+                    limite: CONFIG.ITEMS_PER_PAGE,
+                    pagina: currentPage
+                });
+
+                if (currentSearch) {
+                    params.append('busqueda', currentSearch);
+                }
+
+                const response = await fetch(`${CONFIG.API_URL}/games?${params}`);
+                
+                if (!response.ok) {
+                    throw new Error(`Error ${response.status}: ${response.statusText}`);
+                }
+
+                const result = await response.json();
+                console.log('Respuesta de API:', result);
+                
+                if (!result.success) {
+                    throw new Error(result.message || 'Error en la respuesta');
+                }
+
+                const games = result.data || [];
+                
+                if (games.length === 0) {
+                    showNoResults();
+                } else {
+                    displayGames(games);
+                    totalPages = result.pagination?.totalPaginas || 1;
+                    displayPagination(result.pagination);
+                }
+            } catch (error) {
+                showError(error.message);
+                console.error('Error completo:', error);
+            }
+        }
+
+        // Mostrar los juegos
+        function displayGames(games) {
+            const gamesHTML = games.map(game => `
+                <div class="game-card" onclick="window.open('${game.link}', '_blank')">
+                    <img src="${game.image}" alt="${game.title}" onerror="this.src='https://via.placeholder.com/250x200?text=Sin+Imagen'">
+                    <div class="game-card-content">
+                        <h3>${game.title}</h3>
+                    </div>
+                </div>
+            `).join('');
+
+            gamesContainer.innerHTML = `<div class="games-grid">${gamesHTML}</div>`;
+        }
+
+        // Mostrar paginación en ambos contenedores
+        function displayPagination(pagination) {
+            if (totalPages <= 1) {
+                paginationContainers.forEach(el => el.innerHTML = '');
+                return;
+            }
+
+            const maxVisiblePages = 5;
+            let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+            let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+
+            if (endPage - startPage < maxVisiblePages - 1) {
+                startPage = Math.max(1, endPage - maxVisiblePages + 1);
+            }
+
+            let paginationHTML = `
+                <div class="pagination">
+                    <button onclick="changePage(1)" ${currentPage === 1 ? 'disabled' : ''}>
+                        ⏮️ Primera
+                    </button>
+                    <button onclick="changePage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>
+                        ◀️ Anterior
+                    </button>
+            `;
+
+            for (let i = startPage; i <= endPage; i++) {
+                paginationHTML += `
+                    <button 
+                        onclick="changePage(${i})" 
+                        class="${i === currentPage ? 'active' : ''}"
+                    >
+                        ${i}
+                    </button>
+                `;
+            }
+
+            paginationHTML += `
+                    <button onclick="changePage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>
+                        Siguiente ▶️
+                    </button>
+                    <button onclick="changePage(${totalPages})" ${currentPage === totalPages ? 'disabled' : ''}>
+                        Última ⏭️
+                    </button>
+                    <span class="pagination-info">
+                        Página ${currentPage} de ${totalPages}
+                    </span>
+                </div>
+            `;
+
+            paginationContainers.forEach(el => el.innerHTML = paginationHTML);
+        }
+
+        // Cambiar de página
+        function changePage(page) {
+            if (page < 1 || page > totalPages || page === currentPage) return;
+            currentPage = page;
+            loadGames();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // Mostrar estados de carga/error
+        function showLoading() {
+            gamesContainer.innerHTML = `
+                <div class="loading">
+                    <div class="spinner"></div>
+                    Cargando juegos...
+                </div>
+            `;
+            paginationContainers.forEach(el => el.innerHTML = '');
+        }
+
+        function showError(message) {
+            gamesContainer.innerHTML = `
+                <div class="error">
+                    ❌ Error: ${message}
+                    <br><br>
+                    <button onclick="loadGames()" style="padding: 10px 20px; cursor: pointer;">
+                        Reintentar
+                    </button>
+                </div>
+            `;
+            paginationContainers.forEach(el => el.innerHTML = '');
+        }
+
+        function showNoResults() {
+            gamesContainer.innerHTML = `
+                <div class="no-results">
+                    🔍 No se encontraron juegos
+                    ${currentSearch ? `para "${currentSearch}"` : ''}
+                </div>
+            `;
+            paginationContainers.forEach(el => el.innerHTML = '');
+        }
+
+        // Cargar juegos al iniciar
+        loadGames();
+    </script>
+</body>
+</html>
